@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo noupdate="1">
+
+    <record id="library_book_dune" model="library.book">
+        <field name="title">Dune</field>
+        <field name="isbn">9780441013593</field>
+        <!-- Numeric values need eval, otherwise they are loaded as strings. -->
+        <field name="copies_total" eval="3" />
+    </record>
+
+    <record id="library_book_foundation" model="library.book">
+        <field name="title">Foundation</field>
+        <field name="isbn">9780553293357</field>
+        <field name="copies_total" eval="2" />
+    </record>
+
+</odoo>

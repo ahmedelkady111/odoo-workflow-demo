@@ -1,0 +1,16 @@
+# Review ownership. Only binding once "Require review from Code Owners" is
+# enabled in branch protection -- see the Repo admin checklist in README.md.
+
+* @ahmedelkady111
+
+# The guardrails themselves need a tighter review than ordinary code,
+# otherwise anyone can weaken the policy in the same PR that breaks it.
+/.github/            @ahmedelkady111
+/.github/workflows/  @ahmedelkady111
+/.github/scripts/    @ahmedelkady111
+/CLAUDE.md           @ahmedelkady111
+/.pre-commit-config.yaml @ahmedelkady111
+/.pylintrc-mandatory @ahmedelkady111
+
+# Security definitions in any module.
+**/security/         @ahmedelkady111

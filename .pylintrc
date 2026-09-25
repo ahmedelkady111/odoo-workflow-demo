@@ -1,0 +1,30 @@
+# ADVISORY pylint pass — reported, never blocking (pre-commit runs it with --exit-zero).
+# Promote a message to .pylintrc-mandatory once the codebase is clean of it.
+
+[MASTER]
+load-plugins=pylint_odoo
+score=n
+
+[ODOOLINT]
+valid-odoo-versions=19.0
+manifest-required-authors=ahmedelkady111
+
+[MESSAGES CONTROL]
+disable=all
+enable=attribute-string-redundant,
+    development-status-allowed,
+    invalid-email,
+    manifest-author-string,
+    manifest-behind-migrations,
+    manifest-external-assets,
+    manifest-maintainers-list,
+    manifest-required-author,
+    missing-odoo-file,
+    missing-readme,
+    pointless-string-statement,
+    prefer-env-translation
+
+[REPORTS]
+msg-template={path}:{line}: [{msg_id}({symbol}), {obj}] {msg}
+output-format=colorized
+reports=no

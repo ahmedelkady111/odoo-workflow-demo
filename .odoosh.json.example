@@ -1,0 +1,11 @@
+{
+  "_comment": "Copy to .odoosh.json and fill in. Used by tools/odoosh_build_log.py and /odoo-build-triage.",
+
+  "project": "myproject",
+  "ssh_user": "admin",
+
+  "_optional": "Everything below has a working default; set only if yours differs.",
+  "domain": "dev.odoo.com",
+  "check_context": "odoo.sh",
+  "ssh_host": ""
+}

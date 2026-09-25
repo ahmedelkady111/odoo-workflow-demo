@@ -1,0 +1,7 @@
+# Odoo.sh build logs pulled by tools/odoosh_build_log.py.
+# Never commit these -- production logs can contain customer data and tokens.
+.odoosh-logs/
+
+__pycache__/
+*.py[cod]
+.ruff_cache/

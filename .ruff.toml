@@ -1,0 +1,39 @@
+# Adapted from OCA/oca-addons-repo-template, with the isort/mccabe/per-file-ignores
+# tables moved under [lint] -- OCA's version still uses the top-level form, which
+# ruff >= 0.5 deprecates and warns about on every run.
+#
+# Odoo-aware import sections matter: `odoo` and `odoo.addons` are their own groups,
+# which is what Odoo source actually looks like.
+target-version = "py311"
+fix = true
+line-length = 110
+
+[lint]
+extend-select = [
+    "B",     # bugbear
+    "C90",   # mccabe complexity
+    "E501",  # line too long
+    "I",     # isort
+    "UP",    # pyupgrade
+]
+
+ignore = [
+    # _sql_constraints is a plain list by Odoo convention; RUF012 would fire on
+    # every model that declares one.
+    "RUF012",
+]
+
+[lint.per-file-ignores]
+"__init__.py" = ["F401", "I001"]   # unused / unsorted imports are the norm here
+"__manifest__.py" = ["B018"]        # the manifest dict is a "useless expression"
+"tools/*" = ["T201", "PLW1510"]     # CLI scripts: print() is the output, not a leak
+
+[lint.isort]
+section-order = ["future", "standard-library", "third-party", "odoo", "odoo-addons", "first-party", "local-folder"]
+
+[lint.isort.sections]
+"odoo" = ["odoo"]
+"odoo-addons" = ["odoo.addons"]
+
+[lint.mccabe]
+max-complexity = 16

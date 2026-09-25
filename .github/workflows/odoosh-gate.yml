@@ -1,0 +1,44 @@
+name: odoosh-gate
+
+# Rule 2: a PR does not merge until its Odoo.sh build is green.
+# This verifies the build status on the PR's head commit via the GitHub API,
+# so it cannot be satisfied by pasting a link to some other (green) build.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+  statuses: read
+  checks: read
+  pull-requests: read
+
+concurrency:
+  group: odoosh-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  odoosh-green:
+    name: Odoo.sh build is green
+    runs-on: ubuntu-latest
+    # Generous ceiling; the script's own timeout fires first and reports why.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Wait for the Odoo.sh build on this commit
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-odoosh') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ODOOSH_CHECK_CONTEXT: ${{ vars.ODOOSH_CHECK_CONTEXT }}
+          ODOOSH_TIMEOUT_MINUTES: ${{ vars.ODOOSH_TIMEOUT_MINUTES || '30' }}
+        run: |
+          bash .github/scripts/odoosh_gate.sh \
+            "${{ github.repository }}" "${{ github.event.pull_request.head.sha }}"
+
+      - name: Gate skipped
+        if: ${{ contains(github.event.pull_request.labels.*.name, 'skip-odoosh') }}
+        run: |
+          echo "::warning::The Odoo.sh gate was BYPASSED via the 'skip-odoosh' label."
+          echo "This PR merges without a verified green build. Remove the label to enforce it."
