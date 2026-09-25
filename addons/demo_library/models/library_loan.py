@@ -5,6 +5,7 @@ from odoo.exceptions import UserError
 class LibraryLoan(models.Model):
     _name = "library.loan"
     _description = "Library Loan"
+    _order = "date_out desc, id desc"
 
     # ondelete is explicit on every Many2one -- the default (set null) is
     # rarely what you want.
