@@ -34,6 +34,7 @@
                                     <field name="borrower_id" />
                                     <field name="date_out" />
                                     <field name="date_due" />
+                                    <field name="date_returned" />
                                     <field name="state" />
                                 </list>
                             </field>

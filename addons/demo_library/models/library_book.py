@@ -16,9 +16,12 @@ class LibraryBook(models.Model):
     loan_ids = fields.One2many("library.loan", "book_id", string="Loans")
     active = fields.Boolean(default=True)
 
-    _sql_constraints = [
-        ("isbn_uniq", "unique(isbn)", "A book with this ISBN already exists."),
-    ]
+    # Odoo 19 removed _sql_constraints. It does NOT raise -- it logs a warning
+    # and silently skips the constraint, so the uniqueness simply would not exist.
+    _isbn_uniq = models.Constraint(
+        "UNIQUE (isbn)",
+        "A book with this ISBN already exists.",
+    )
 
     @api.depends("copies_total", "loan_ids.state")
     def _compute_copies_available(self):
