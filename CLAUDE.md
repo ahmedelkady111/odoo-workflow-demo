@@ -96,7 +96,13 @@ Must declare, in this order: `name`, `summary`, `version`, `category`, `author`,
   paths through related records. A compute that reads a field it does not depend on produces stale
   values that only show up in production.
 - Never write to another record inside a compute. Use an `onchange`, an action, or `inverse`.
-- `@api.constrains` for cross-field validation; SQL constraints (`_sql_constraints`) for uniqueness.
+- `@api.constrains` for cross-field validation. For uniqueness use `models.Constraint`:
+  **Odoo 19 removed `_sql_constraints` and does not raise on it** — it logs a warning and
+  silently skips the constraint, so the uniqueness you think you declared does not exist.
+
+  ```python
+  _isbn_uniq = models.Constraint("UNIQUE (isbn)", "A book with this ISBN already exists.")
+  ```
 - Every `Many2one` declares `ondelete=` explicitly. The default (`set null`) is rarely what you want.
 - **No `search()`, `browse()`, or `read()` inside a loop.** Batch it: one `search` plus a
   `grouped()`/`filtered()` pass, or `read_group`. This is the single most common cause of an Odoo
