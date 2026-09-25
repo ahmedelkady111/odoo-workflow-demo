@@ -35,8 +35,18 @@ collect_results() {
         --jq ".statuses[] | [.state, .context, (.target_url // \"\")] | @tsv" 2>/dev/null \
         | grep -iF "${CONTEXT_MATCH}" || true
 
+    # select(app.slug != "github-actions") is load-bearing, not a tidy-up.
+    # This job is itself named "Odoo.sh build is green", so it matches
+    # CONTEXT_MATCH and would read its OWN check-run as the build result --
+    # reporting a bogus RED, or worse going GREEN off a previous run of itself
+    # with no Odoo.sh build in sight. Odoo.sh reports as an external app or as a
+    # commit status, never as a GitHub Actions check-run, so dropping the whole
+    # github-actions app is both safe and sufficient.
     gh api "repos/${REPO}/commits/${SHA}/check-runs" \
-        --jq '.check_runs[] | [(if .status != "completed" then "pending" else (.conclusion // "failure") end), .name, (.html_url // "")] | @tsv' 2>/dev/null \
+        --jq '.check_runs[]
+              | select((.app.slug // "") != "github-actions")
+              | [(if .status != "completed" then "pending" else (.conclusion // "failure") end), .name, (.html_url // "")]
+              | @tsv' 2>/dev/null \
         | grep -iF "${CONTEXT_MATCH}" || true
 }
 
