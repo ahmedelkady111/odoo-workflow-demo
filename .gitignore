@@ -2,6 +2,9 @@
 # Never commit these -- production logs can contain customer data and tokens.
 .odoosh-logs/
 
+# Local Odoo test runs (tools/run_odoo_tests.sh).
+.odoo-test-logs/
+
 __pycache__/
 *.py[cod]
 .ruff_cache/

@@ -1,11 +1,10 @@
 {
-  "_comment": "Copy to .odoosh.json and fill in. Used by tools/odoosh_build_log.py and /odoo-build-triage.",
+  "_comment": "Copy to .odoosh.json. Used by tools/odoosh_build_log.py and /odoo-build-triage.",
 
   "project": "myproject",
-  "ssh_user": "admin",
 
-  "_optional": "Everything below has a working default; set only if yours differs.",
-  "domain": "dev.odoo.com",
-  "check_context": "odoo.sh",
-  "ssh_host": ""
+  "_ssh": "There is deliberately no ssh_user here. On Odoo.sh the SSH user is the BUILD ID, so it changes with every build. Copy the whole '<build_id>@<host>' line from the build page's SSH box and pass it as --host. Click 'Allow my IP' on that same panel first: port 22 is IP-allowlisted, and an un-allowed IP times out rather than being refused.",
+
+  "_optional": "Set only if yours differs from the default.",
+  "check_context": "odoo.sh"
 }

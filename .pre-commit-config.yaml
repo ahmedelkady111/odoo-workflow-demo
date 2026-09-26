@@ -1,4 +1,4 @@
-# Odoo 19.0 — {{REPO}}
+# Odoo 19.0 — odoo-workflow-demo
 # Derived from OCA/oca-addons-repo-template, trimmed to what a private project needs
 # (the OCA README/website generators are for community addon repos and are omitted).
 #
@@ -68,3 +68,22 @@ repos:
         verbose: true
         args: ["--rcfile=.pylintrc", "--exit-zero"]
         exclude: ^tools/
+
+  # Runs on `git push` only, never on every commit -- it boots Odoo in Docker
+  # and takes minutes. Enable it with:
+  #     pre-commit install --hook-type pre-push
+  #
+  # A local hook is a safety net, NOT enforcement: it only exists for people who
+  # installed it, and `git push --no-verify` skips it. That is fine here, because
+  # the binding check is Odoo.sh -- it installs and tests the module too, in about
+  # 25 seconds, and `odoosh-gate` blocks the merge on its verdict. This hook only
+  # buys you the answer sooner, on your own machine.
+  - repo: local
+    hooks:
+      - id: odoo-tests
+        name: Odoo install + module tests (docker)
+        entry: tools/run_odoo_tests.sh
+        language: script
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
