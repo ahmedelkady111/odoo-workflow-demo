@@ -5,6 +5,13 @@ Two subcommands, deliberately separate so the parsing is testable without
 network or SSH:
 
     fetch <sha>          resolve the build for <sha>, SSH in, print its logs
+
+Odoo.sh note: host discovery cannot work. Build hostnames embed the build id and
+are truncated to the 63-char DNS limit, the SSH *user* is the build id too, and
+the commit status links only to the bare builds list. Copy the whole line from
+the build page's SSH box and pass it to --host, e.g.
+  --host "38706849@myproject-feat-loan-return--38706849.dev.odoo.com"
+Port 22 is IP-allowlisted: click "Allow my IP" on that same panel first.
     parse <logfile...>   extract errors from an already-downloaded log
 
 READ-ONLY on the Odoo.sh side. The only remote commands issued are ls/stat/
@@ -25,8 +32,18 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / ".odoosh.json"
 
-# Logs worth reading on a failed build, best first.
-LOG_CANDIDATES = ["install.log", "update.log", "odoo.log", "build.log", "pip.log"]
+# Logs worth reading on a failed build, best first. Observed on a real Odoo.sh
+# development build (2026-09-26): install.log, install.log.1, odoo.log, pip.log,
+# sh_ai.log, sh_webshell.log. update.log appears on staging/production builds,
+# which update modules rather than installing them fresh. The sh_* logs are
+# platform chatter, not build output, so they are deliberately not read.
+LOG_CANDIDATES = [
+    "install.log",
+    "install.log.1",  # rotated: on a rebuilt container this holds the PREVIOUS attempt
+    "update.log",
+    "odoo.log",
+    "pip.log",
+]
 
 SSH_OPTS = [
     "-o",
@@ -98,6 +115,12 @@ def parse_build_url(url: str) -> tuple[str | None, str | None, str | None]:
     m = re.search(r"/build/(?P<build>\d+)", url)
     if m:
         return None, None, m.group("build")
+    # Odoo.sh's commit status points at the bare builds list
+    # (https://www.odoo.sh/project/<project>/builds) -- no branch, no build id.
+    # Take whatever it does carry.
+    m = re.search(r"/project/(?P<project>[^/]+)", url)
+    if m:
+        return m.group("project"), None, None
     return None, None, None
 
 
@@ -111,6 +134,9 @@ def candidate_hosts(cfg: dict, project: str | None, branch: str | None, build: s
         return []
 
     domain = cfg.get("domain", "dev.odoo.com")
+    # The build URL rarely names the branch, so fall back to the checked-out one.
+    if not branch:
+        branch = run(["git", "rev-parse", "--abbrev-ref", "HEAD"]).stdout.strip() or None
     slug = (branch or "").replace("/", "-").replace("_", "-")
     out = []
     if slug and build:
@@ -122,9 +148,20 @@ def candidate_hosts(cfg: dict, project: str | None, branch: str | None, build: s
     return out
 
 
-def probe(user: str, host: str) -> bool:
+def probe(user: str, host: str) -> tuple[bool, str]:
+    """Return (ok, diagnosis). The failure mode matters more than the failure."""
     proc = run(["ssh", *SSH_OPTS, f"{user}@{host}", "echo OK"])
-    return proc.returncode == 0 and "OK" in proc.stdout
+    if proc.returncode == 0 and "OK" in proc.stdout:
+        return True, ""
+    err = (proc.stderr or "").lower()
+    if "timed out" in err or "timeout" in err:
+        # Odoo.sh IP-allowlists port 22. An un-allowed IP times out; it is not refused.
+        return False, "timeout"
+    if "permission denied" in err or "publickey" in err:
+        return False, "auth"
+    if "could not resolve" in err or "name or service not known" in err:
+        return False, "dns"
+    return False, "other"
 
 
 def fetch(args) -> int:
@@ -145,8 +182,13 @@ def fetch(args) -> int:
     print(f"Commit : {sha}")
 
     if args.host:
-        hosts, project, branch, build = [args.host], None, None, None
-        print(f"Host   : {args.host} (explicit)")
+        # Odoo.sh's SSH box gives "<build_id>@<host>" -- the user IS the build id
+        # and changes every build, so an ssh_user from config cannot be right.
+        raw = args.host.removeprefix("ssh ").strip()
+        if "@" in raw:
+            user, raw = raw.split("@", 1)
+        hosts, project, branch, build = [raw], None, None, None
+        print(f"Host   : {user}@{raw} (explicit)")
     else:
         url = resolve_build_url(repo, sha, context_match)
         if not url:
@@ -166,20 +208,48 @@ def fetch(args) -> int:
             )
 
     host = None
+    why = ""
     for candidate in hosts:
         print(f"         probing {user}@{candidate} ...", end=" ", flush=True)
-        if probe(user, candidate):
+        ok, why = probe(user, candidate)
+        if ok:
             print("connected")
             host = candidate
             break
-        print("no")
+        print(why or "no")
     if not host:
+        # An explicit --host that fails is a different problem from a bad guess.
+        hint = {
+            "timeout": (
+                "Port 22 timed out. Odoo.sh IP-allowlists SSH -- open the build page's\n"
+                '       SSH panel and click "Allow my IP". An un-allowed IP times out; it is\n'
+                "       never refused, so a timeout here is almost always this."
+            ),
+            "auth": (
+                "The port is open but the key was rejected. Register this machine's public\n"
+                "       key (~/.ssh/id_*.pub) with the Odoo.sh project."
+            ),
+            "dns": "The hostname did not resolve -- the build may have been garbage-collected.",
+        }.get(why)
+
+        if args.host:
+            die(
+                f"could not SSH into {user}@{hosts[0]}\n\n"
+                + (f"       {hint}\n" if hint else "       The connection failed.\n")
+                + "\n       Dev builds are also garbage-collected after a few days; if this one is\n"
+                "       gone, take a fresh host from a recent build's SSH panel."
+            )
+
         die(
             "could not SSH into any candidate host:\n"
             + "".join(f"         - {user}@{h}\n" for h in hosts)
-            + "       Check that your key is registered on the Odoo.sh project, and that the\n"
-            "       build still exists (Odoo.sh garbage-collects old development builds).\n"
-            "       The exact host is on the build page under the SSH tab; pass it with --host."
+            + "\n       Odoo.sh build hostnames embed the BUILD ID, and the commit status it\n"
+            "       posts links to the bare builds list -- so the id cannot be derived and\n"
+            "       these guesses will usually miss. That is expected, not a misconfiguration.\n"
+            "\n       Copy the host from the build page's CONNECT button and pass it:\n"
+            "         python3 tools/odoosh_build_log.py fetch --host <the-host>\n"
+            "\n       Also check your key is registered on the Odoo.sh project, and that the\n"
+            "       build still exists (dev builds are garbage-collected after a few days)."
         )
 
     listing = run(["ssh", *SSH_OPTS, f"{user}@{host}", "ls -1 ~/logs/ 2>/dev/null"]).stdout.split()
@@ -224,7 +294,12 @@ FILE_LINE = re.compile(r'^\s*File "(?P<path>[^"]+)", line (?P<line>\d+)', re.MUL
 # Odoo XML parse errors name the offending file explicitly.
 XML_ERR = re.compile(r'(?P<path>[^",\s]+\.xml)(?:[:,]\s*line\s*|:)(?P<line>\d+)', re.MULTILINE)
 
-INTERESTING = ("ERROR", "CRITICAL")
+# WARNING belongs here, and that is not a style choice. Odoo.sh turns a build
+# amber on warnings alone and reports commit status `error` to GitHub -- the
+# _sql_constraints removal in Odoo 19 is exactly that: a warning, no traceback,
+# build fails. Watching only ERROR/CRITICAL reports "nothing wrong" on precisely
+# the builds that failed.
+INTERESTING = ("WARNING", "ERROR", "CRITICAL")
 
 
 def extract(text: str) -> dict:
@@ -318,9 +393,10 @@ def parse_files(paths, context_lines: int) -> int:
         all_err.extend(res["errors"])
 
     if not all_tb and not all_err:
-        print("No ERROR/CRITICAL lines and no tracebacks found.")
-        print("The build may have failed before Odoo started (check pip.log / build.log),")
-        print("or the failure is not in the tail that was read -- retry with a larger --lines.")
+        print("No WARNING/ERROR/CRITICAL lines and no tracebacks found.")
+        print("If the build still failed, it may have died before Odoo started -- read")
+        print("pip.log on the build. Or the failure is outside the tail that was read;")
+        print("retry with a larger --lines.")
         return EXIT_CLEAN
 
     # Deduplicate tracebacks by their exception line; a failing install repeats them.
@@ -332,7 +408,7 @@ def parse_files(paths, context_lines: int) -> int:
             unique.append(tb)
 
     print("=" * 72)
-    print(f"{len(unique)} distinct traceback(s), {len(all_err)} ERROR/CRITICAL line(s)")
+    print(f"{len(unique)} distinct traceback(s), {len(all_err)} WARNING/ERROR/CRITICAL line(s)")
     print("=" * 72)
 
     for n, tb in enumerate(unique, 1):
@@ -354,7 +430,7 @@ def parse_files(paths, context_lines: int) -> int:
 
     if all_err:
         print("\n" + "=" * 72)
-        print("ERROR/CRITICAL lines:")
+        print("WARNING/ERROR/CRITICAL lines:")
         seen_msgs = set()
         for e in all_err:
             key = (e["logger"], e["msg"][:120])
@@ -373,7 +449,7 @@ def main() -> int:
     f = sub.add_parser("fetch", help="resolve the build for a commit, SSH in, read its logs")
     f.add_argument("sha", nargs="?", help="commit SHA (default: HEAD)")
     f.add_argument("--repo", help="owner/repo (default: from gh)")
-    f.add_argument("--host", help="SSH host, bypassing URL-based discovery")
+    f.add_argument("--host", help='full "<build_id>@<host>" from the build page SSH box')
     f.add_argument("--lines", type=int, default=3000, help="log tail length (default 3000)")
     f.add_argument("--outdir", default=".odoosh-logs", help="where to save logs")
     f.add_argument("--context", type=int, default=0, help="truncate long tracebacks to N lines")

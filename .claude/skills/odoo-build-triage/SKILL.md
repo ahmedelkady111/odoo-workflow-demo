@@ -22,6 +22,29 @@ is what triggers the next build.
   PR body, or an issue. If you spot a secret, report that one is exposed — do not repeat
   its value.
 
+## Prerequisite — check this first, it is not always available
+
+This skill reads the build over **SSH**, and SSH is not reachable on every Odoo.sh project.
+Verified on a trial/partnership project on 2026-09-26: the build host resolved and port 443
+served the web UI normally, but **port 22 was filtered** — so nothing here could run.
+
+Confirm before going further:
+
+```bash
+HOST=<the host from the build page's CONNECT button>
+timeout 20 bash -c "cat < /dev/null > /dev/tcp/$(getent hosts $HOST | awk '{print $1}')/22" \
+  && echo "SSH reachable" || echo "SSH NOT reachable on this project"
+```
+
+A **timeout** means the port is closed — a plan or project-level restriction, not your key.
+A **permission denied** means the port is open but your key is not registered.
+
+If SSH is not reachable, stop and say so plainly. Do not fake a diagnosis from the commit
+status alone. The fallback is the Odoo.sh web UI: the builds page has a structured
+**Errors** panel (the ⓘ button on a build) that lists each warning and error with its
+level and message — it is cleaner than the raw log, but it is browser-only, so neither
+this skill nor CI can reach it. Ask the user to paste what it shows.
+
 ## 1. Get the log
 
 ```bash

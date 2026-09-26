@@ -22,6 +22,10 @@ Three branch roles, and nothing else:
 - **Never open a PR into `main` from anything but `staging`.** Promoting to production *is* the
   `staging` → `main` PR. There is no hotfix shortcut; an urgent fix still goes
   `fix/<slug>` → `staging` → `main`, just faster.
+- **Before you push, your modules must install into a clean Odoo and their tests must
+  pass:** `./tools/run_odoo_tests.sh`. A **warning** fails this, not just an error — Odoo
+  exits 0 on warnings and Odoo.sh does not, so an exit code is not the verdict.
+  `pre-commit install --hook-type pre-push` makes this run automatically on `git push`.
 - **A PR is not mergeable until its Odoo.sh build is green.** The Odoo.sh build URL for the PR's
   head commit goes in the PR body, and CI verifies the commit status independently — pasting a
   link to a red or stale build does not get you past the gate.

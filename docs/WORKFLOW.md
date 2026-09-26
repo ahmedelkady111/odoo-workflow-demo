@@ -16,9 +16,19 @@ Three branches, one direction of travel. No exceptions, no hotfix shortcut.
 git switch staging && git pull
 git switch -c feat/leave-accrual
 # ...work...
-pre-commit run --all-files          # same checks CI runs
+pre-commit run --all-files          # fast checks: lint, manifest, security
+./tools/run_odoo_tests.sh           # slow check: real Odoo install + tests
 git push -u origin HEAD
 ```
+
+Install the hooks once and the slow check runs automatically on `git push`:
+
+```bash
+pre-commit install --hook-type pre-push
+```
+
+It boots Odoo in Docker, so it takes minutes — which is why it runs on push, not
+on every commit.
 
 Then open the PR against **`staging`**. Or run `/odoo-pr`, which does all of the above
 and refuses the paths that CI would reject anyway.
@@ -60,6 +70,31 @@ gh pr create --base main --head staging --title "Release $(date +%Y-%m-%d)"
   something else: look at the PR's checks list and set the repo variable
   `ODOOSH_CHECK_CONTEXT` to the exact name. A missing build is deliberately treated as a
   failure, never as a pass.
+
+### Why there is no "run the tests" job in CI
+
+Odoo.sh already installs your modules and runs their tests on every push — in about 25
+seconds — and `odoosh-green` blocks the merge on that verdict. A GitHub Actions job doing
+the same thing would take 6-10 minutes (it downloads a 2 GB image and builds from scratch)
+and would tell you nothing new.
+
+When Odoo.sh goes red it gives you the verdict, not the reason. You get the reason by
+running the same script locally, for free:
+
+```bash
+./tools/run_odoo_tests.sh
+```
+
+### Why the tests are judged on the log, not the exit code
+
+`odoo -i <module> --test-enable` exits **0** even when it logs a warning. Odoo.sh does not:
+a warning turns its build amber and reports commit status `error` to GitHub. Odoo 19
+dropping `_sql_constraints` is exactly that shape — a warning, no traceback, exit 0, and
+the constraint silently never reaches the database.
+
+So `run_odoo_tests.sh` reads the log with the same parser used on real Odoo.sh logs and
+fails on `WARNING` too. Verified: with `_sql_constraints` reintroduced, Odoo exits 0 and
+the script still fails, naming the warning.
 
 ## Rules that are not negotiable
 
